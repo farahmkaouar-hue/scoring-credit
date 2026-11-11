@@ -1,42 +1,34 @@
 # Score de crédit pour une clientèle de particuliers
 
-Modèle de notation qui estime la probabilité de défaut d'un client à partir de ses données de crédit, de compte et de profil. Projet réalisé à l'ESSAI.
+Ce projet construit une grille de score qui estime la probabilité de défaut à 12 mois d'un client, à partir de ses données de crédit, de compte et de profil. Il porte sur 5 752 observations de 2 289 clients, sur quatre dates d'observation (2018 à 2021). Projet réalisé à l'ESSAI.
 
-**Défaut** : plus de 90 jours de retard de paiement sur les 12 derniers mois.
+**Défaut** : plus de 90 jours de retard de paiement dans les 12 mois.
 
-## Démarche (`scoring_credit.ipynb`)
+## Démarche
 
-1. **Qualité des données et exploration** : valeurs manquantes, distributions, taux de défaut par catégorie.
-2. **Préparation** : traitement des valeurs manquantes et aberrantes, contrôle qu'aucune variable postérieure au défaut n'est utilisée.
-3. **Création de variables** : âge, ratios d'endettement (encours sur revenus, encours sur garanties), intensité de la relation bancaire, indicateurs de risque.
-4. **Encodage WoE** et séparation apprentissage / test.
-5. **Rééquilibrage** des classes par SMOTE.
-6. **Sélection des variables par Information Value** (seuil de 0,02), puis élimination des variables trop corrélées. Les variables à l'IV anormalement élevée (supérieure à 0,5, comme le solde arrêté) sont signalées comme suspectes avant d'être retenues.
-7. **Régression logistique** (pseudo R² de McFadden : 0,318), analyse des coefficients et des odds ratios.
-8. **Évaluation** sur l'échantillon de test : courbe ROC, AUC, Gini, KS, matrice de confusion.
-9. **Échelle de notation** : regroupement des clients en classes de risque, avec un taux de défaut qui augmente d'une classe à l'autre.
+1. **Validation hors période** : apprentissage sur 2018-2020, test sur 2021. La validation croisée est **groupée par client**, car un même client apparaît à plusieurs dates.
+2. **Préparation** : variables à risque de fuite retirées (code tribunal), ratios d'endettement, âge à la date d'observation.
+3. **Encodage WoE** appris sur l'apprentissage, avec des classes fusionnées pour que le taux de défaut varie dans un seul sens.
+4. **Sélection** en trois étapes : Information Value (entre 0,02 et 0,5), stabilité dans le temps (PSI inférieur à 0,1), puis stepwise sur l'AUC.
+5. **Régression logistique réglée**, sans rééquilibrage, pour garder des PD calibrées. Elle est comparée à un **modèle challenger** (gradient boosting).
+6. **Grille de points** (600 points pour une cote de 50:1, 20 points pour doubler la cote) et **échelle de notation**, construites sur l'apprentissage puis vérifiées sur 2021.
 
-## Résultats (échantillon de test)
+## Résultats
 
-| AUC | Gini | KS |
-|---|---|---|
-| 0,820 | 0,640 | 0,588 |
+| Modèle | AUC CV 2018-2020 | AUC 2021 | PD prédite / observée en 2021 |
+|---|---|---|---|
+| Grille de score initiale | 0,75 | 0,58 | 3,6 % / 2,2 % |
+| **Grille révisée (variables stables)** | 0,70 | **0,64** | **2,0 % / 2,2 %** |
+| Challenger gradient boosting | 0,74 | 0,80 | 1,4 % / 2,2 % |
 
-**Échelle de notation retenue (4 classes)** : les bornes sont fixées sur les PD de l'apprentissage. On part de 8 classes et on réduit leur nombre jusqu'à obtenir un taux de défaut strictement croissant.
+- **Le test 2021 a révélé une rupture de données.** Le ratio encours sur engagement change complètement de distribution (PSI de 1,72), alors que rien ne le laissait voir dans les années d'apprentissage. La grille révisée le retire et reste calibrée.
+- **Effet du COVID :** sans l'année 2020 (reports d'échéances imposés par la BCT), le score varie à peine.
+- **Le challenger discrimine mieux,** mais il est moins lisible. En banque, il servirait à surveiller la grille.
 
-| Classe | Part du portefeuille | Taux de défaut observé |
-|---|---|---|
-| C1 | 46,0 % | 0,51 % |
-| C2 | 30,3 % | 1,15 % |
-| C3 | 17,1 % | 2,38 % |
-| C4 | 6,6 % | 15,79 % |
-
-**Limites** : l'échantillon de test ne compte que 35 défauts, ce qui rend les taux par classe fragiles. Le modèle est entraîné sur des données rééquilibrées : ses PD brutes surestiment le risque, d'où l'utilisation des taux observés par classe.
+![Échelle de notation](figures/echelle_notation.png)
 
 ## Données
 
-La base utilisée concerne de vrais clients et n'est donc **pas publiée**. Pour la même raison, les sorties du notebook qui affichaient des lignes de la base ont été retirées ; les graphiques et les résultats agrégés sont conservés.
+La base concerne de vrais clients : elle n'est **pas publiée**, et le notebook n'affiche que des résultats agrégés. Le fichier `data/echantillon_fictif.csv` contient 100 lignes fictives avec les mêmes colonnes, pour montrer la structure des données. Il ne correspond à aucun client réel.
 
-Le fichier `data/echantillon_fictif.csv` contient **100 lignes fictives** avec les mêmes 29 colonnes. Chaque colonne a été tirée au hasard séparément : l'échantillon montre la structure des données, mais il ne correspond à aucun client réel et ne permet pas de reproduire les résultats.
-
-Technologies : Python, pandas, scikit-learn, imbalanced-learn, statsmodels.
+Technologies : Python, pandas, scikit-learn.
